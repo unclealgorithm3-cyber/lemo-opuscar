@@ -1,22 +1,8 @@
-name: Render Video
+name: Render Mother vs Doctor Reel
 
 on:
   workflow_dispatch:
     inputs:
-      demo:
-        description: "Folder containing the film index.html"
-        required: true
-        default: "styles/chalkboard/demo"
-        type: string
-      size:
-        description: "Video resolution"
-        required: true
-        default: "1080x1920"
-        type: choice
-        options:
-          - "1080x1920"
-          - "1920x1080"
-          - "720x1280"
       fps:
         description: "Frames per second"
         required: true
@@ -25,15 +11,6 @@ on:
         options:
           - "24"
           - "30"
-      workers:
-        description: "Parallel rendering workers"
-        required: true
-        default: "2"
-        type: choice
-        options:
-          - "1"
-          - "2"
-          - "3"
 
 permissions:
   contents: read
@@ -44,13 +21,11 @@ jobs:
     timeout-minutes: 90
 
     env:
-      DEMO_DIR: ${{ inputs.demo }}
-      VIDEO_SIZE: ${{ inputs.size }}
+      REEL_DIR: styles/mother-vs-doctor/reel
       VIDEO_FPS: ${{ inputs.fps }}
-      VIDEO_WORKERS: ${{ inputs.workers }}
 
     steps:
-      - name: Get project
+      - name: Checkout project
         uses: actions/checkout@v4
 
       - name: Set up Node.js
@@ -59,52 +34,80 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install FFmpeg
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system tools and Hindi fonts
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg espeak-ng fonts-noto-core
 
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Install Playwright browser
+      - name: Install Playwright Chromium
         run: |
           node node_modules/playwright-core/cli.js install --with-deps chromium-headless-shell
 
-      - name: Check render input
+      - name: Install Hindi TTS and audio dependencies
         run: |
-          case "$DEMO_DIR" in
-            /*|..|../*|*/../*|*/..) 
-              echo "Invalid demo directory"
-              exit 1
-              ;;
-          esac
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "kokoro-onnx==0.6.1" \
+            "misaki==0.9.4" \
+            "huggingface_hub[hf_xet]" \
+            numpy \
+            soundfile
 
-          if [ ! -f "$DEMO_DIR/index.html" ]; then
-            echo "No index.html found in: $DEMO_DIR"
-            exit 1
-          fi
+      - name: Generate Hindi voices
+        run: |
+          python "$REEL_DIR/tts_hindi.py" \
+            "$REEL_DIR/lines.json" \
+            "$REEL_DIR/voices"
 
-          ffmpeg -version | head -n 1
-          echo "Demo: $DEMO_DIR"
-          echo "Resolution: $VIDEO_SIZE"
-          echo "FPS: $VIDEO_FPS"
+      - name: Create original music, sound effects and subtitles
+        run: |
+          python "$REEL_DIR/mix.py" \
+            "$REEL_DIR/lines.json" \
+            "$REEL_DIR/voices" \
+            "$REEL_DIR/mix.wav" \
+            "$REEL_DIR/captions.srt"
 
-      - name: Render MP4
+      - name: Render vertical animation
+        run: |
+          mkdir -p "$REEL_DIR/out"
+
+          LEMO_ANGLE=swiftshader node core/render/video.mjs \
+            "$REEL_DIR" \
+            --size 1080x1920 \
+            --fps "$VIDEO_FPS" \
+            --workers 2 \
+            --out "$REEL_DIR/out/video.mp4"
+
+      - name: Combine video and audio
         run: |
           mkdir -p artifacts
 
-          LEMO_ANGLE=swiftshader node core/render/video.mjs \
-            "$DEMO_DIR" \
-            --size "$VIDEO_SIZE" \
-            --fps "$VIDEO_FPS" \
-            --workers "$VIDEO_WORKERS" \
-            --out artifacts/video.mp4
+          sh core/render/mux.sh \
+            "$REEL_DIR/out/video.mp4" \
+            "$REEL_DIR/mix.wav" \
+            artifacts/mother-vs-doctor-reel.mp4 \
+            "$VIDEO_FPS" 0
 
-      - name: Upload finished video
+          cp "$REEL_DIR/captions.srt" artifacts/captions.srt
+
+          ffprobe -v error \
+            -show_entries format=duration \
+            -show_entries stream=codec_type,width,height \
+            -of default=noprint_wrappers=1 \
+            artifacts/mother-vs-doctor-reel.mp4
+
+      - name: Upload finished Reel
         uses: actions/upload-artifact@v4
         with:
-          name: rendered-video
-          path: artifacts/video.mp4
+          name: mother-vs-doctor-instagram-reel
+          path: artifacts/
           if-no-files-found: error
           retention-days: 7
