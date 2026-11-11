@@ -1,0 +1,110 @@
+name: Render Video
+
+on:
+  workflow_dispatch:
+    inputs:
+      demo:
+        description: "Folder containing the film index.html"
+        required: true
+        default: "styles/chalkboard/demo"
+        type: string
+      size:
+        description: "Video resolution"
+        required: true
+        default: "1080x1920"
+        type: choice
+        options:
+          - "1080x1920"
+          - "1920x1080"
+          - "720x1280"
+      fps:
+        description: "Frames per second"
+        required: true
+        default: "24"
+        type: choice
+        options:
+          - "24"
+          - "30"
+      workers:
+        description: "Parallel rendering workers"
+        required: true
+        default: "2"
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "3"
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    env:
+      DEMO_DIR: ${{ inputs.demo }}
+      VIDEO_SIZE: ${{ inputs.size }}
+      VIDEO_FPS: ${{ inputs.fps }}
+      VIDEO_WORKERS: ${{ inputs.workers }}
+
+    steps:
+      - name: Get project
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: |
+          node node_modules/playwright-core/cli.js install --with-deps chromium-headless-shell
+
+      - name: Check render input
+        run: |
+          case "$DEMO_DIR" in
+            /*|..|../*|*/../*|*/..) 
+              echo "Invalid demo directory"
+              exit 1
+              ;;
+          esac
+
+          if [ ! -f "$DEMO_DIR/index.html" ]; then
+            echo "No index.html found in: $DEMO_DIR"
+            exit 1
+          fi
+
+          ffmpeg -version | head -n 1
+          echo "Demo: $DEMO_DIR"
+          echo "Resolution: $VIDEO_SIZE"
+          echo "FPS: $VIDEO_FPS"
+
+      - name: Render MP4
+        run: |
+          mkdir -p artifacts
+
+          LEMO_ANGLE=swiftshader node core/render/video.mjs \
+            "$DEMO_DIR" \
+            --size "$VIDEO_SIZE" \
+            --fps "$VIDEO_FPS" \
+            --workers "$VIDEO_WORKERS" \
+            --out artifacts/video.mp4
+
+      - name: Upload finished video
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-video
+          path: artifacts/video.mp4
+          if-no-files-found: error
+          retention-days: 7
