@@ -1,4 +1,4 @@
-name: Render test video with audio
+name: Render test video
 
 on:
   workflow_dispatch:
@@ -8,8 +8,8 @@ permissions:
 
 jobs:
   render:
-    runs-on: ubuntu-26.04
-    timeout-minutes: 120
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -21,106 +21,42 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
+      - name: Install project dependencies
+        run: npm ci
 
       - name: Install FFmpeg
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-          ffmpeg -version | head -1
 
-      - name: Install Node dependencies
-        run: npm ci
-
-      - name: Install Python audio and voice dependencies
-        run: |
-          python -m venv .venv
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install \
-            -r requirements.txt \
-            -r requirements-voice.txt \
-            librosa
-
-      - name: Install Chromium
+      - name: Install Playwright Chromium
         run: |
           node node_modules/playwright-core/cli.js install --with-deps chromium-headless-shell
 
-      - name: Download Kokoro voice model
-        run: sh tools/fetch.sh voice
-
-      - name: Download music instrument libraries
+      - name: Prepare topic assets
         run: |
-          sh tools/fetch.sh instruments vcsl
-          sh tools/fetch.sh instruments vsco2ce
+          set -eu
+          sh styles/mother-vs-doctor/demo/tools/fonts.sh
 
-      - name: Prepare Blueprint fonts
-        run: |
-          sh styles/blueprint/demo/tools/fonts.sh
+          echo "Assets for mother-vs-doctor topic are ready."
 
-      - name: Generate voice narration
-        run: |
-          PY=.venv/bin/python
-          D=styles/blueprint/demo
-
-          $PY core/tts/tts.py "$D/lines.json" "$D/voices"
-
-      - name: Check narration and generate word timings
-        run: |
-          .venv/bin/python core/tts/asr_check.py \
-            styles/blueprint/demo/lines.json \
-            styles/blueprint/demo/voices \
-            --model base.en
-
-      - name: Generate subtitles
-        run: node styles/blueprint/demo/tools/subs.mjs
-
-      - name: Generate sound event timings
-        run: node core/render/events.mjs styles/blueprint/demo
-
-      - name: Generate background music
-        run: .venv/bin/python styles/blueprint/demo/music/score.py
-
-      - name: Mix narration, music and sound effects
-        run: .venv/bin/python styles/blueprint/demo/mix.py
-
-      - name: Check finished audio
-        run: .venv/bin/python styles/blueprint/demo/tools/check_mix.py
-
-      - name: Render animation
+      - name: Render topic demonstration
         env:
           LEMO_ANGLE: swiftshader
         run: |
-          node core/render/video.mjs styles/blueprint/demo \
+          node core/render/video.mjs styles/mother-vs-doctor/demo \
             --size 1280x720 \
             --fps 24 \
-            --workers 2 \
-            --out /tmp/blueprint-picture.mp4
+            --workers 1 \
+            --out /tmp/lemo-mother-vs-doctor-test.mp4
 
-      - name: Combine video and audio
-        run: |
-          sh core/render/mux.sh \
-            /tmp/blueprint-picture.mp4 \
-            styles/blueprint/demo/mix.wav \
-            /tmp/blueprint-with-audio.mp4 \
-            24 4
+          test -s /tmp/lemo-mother-vs-doctor-test.mp4
+          ls -lh /tmp/lemo-mother-vs-doctor-test.mp4
 
-      - name: Verify audio track
-        run: |
-          AUDIO=$(ffprobe -v error \
-            -select_streams a:0 \
-            -show_entries stream=codec_name \
-            -of csv=p=0 /tmp/blueprint-with-audio.mp4)
-
-          test -n "$AUDIO"
-          echo "Audio track verified: $AUDIO"
-
-      - name: Upload final video
+      - name: Upload rendered MP4
         uses: actions/upload-artifact@v7
         with:
-          name: blueprint-video-with-audio
-          path: /tmp/blueprint-with-audio.mp4
+          name: mother-vs-doctor-render-test
+          path: /tmp/lemo-mother-vs-doctor-test.mp4
           if-no-files-found: error
           retention-days: 7
