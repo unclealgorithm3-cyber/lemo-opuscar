@@ -21,6 +21,11 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
       - name: Install project dependencies
         run: npm ci
 
@@ -33,22 +38,34 @@ jobs:
         run: |
           node node_modules/playwright-core/cli.js install --with-deps chromium-headless-shell
 
-      - name: Download Chalkboard font assets
+      - name: Prepare Chalkboard fonts
         run: |
           set -eu
           FONT_DIR="styles/chalkboard/demo/fonts"
-          EMS="https://gitlab.com/oskay/svg-fonts/-/raw/master/fonts/EMS"
           mkdir -p "$FONT_DIR"
+
+          EMS="https://gitlab.com/oskay/svg-fonts/-/raw/master/fonts/EMS"
 
           for font in EMSDelight EMSCasualHand; do
             curl --fail --location --retry 3 --retry-all-errors \
               "$EMS/$font.svg" \
               --output "$FONT_DIR/$font.svg"
-
             test -s "$FONT_DIR/$font.svg"
-            grep -qi 'font-face' "$FONT_DIR/$font.svg"
-            echo "Downloaded and checked $font.svg"
+            echo "Downloaded $font.svg"
           done
+
+          curl --fail --location --retry 3 --retry-all-errors \
+            "https://github.com/lxgw/LxgwWenKai/releases/download/v1.530/LXGWWenKai-Regular.ttf" \
+            --output "$FONT_DIR/LXGWWenKai-Regular.ttf"
+
+          test -s "$FONT_DIR/LXGWWenKai-Regular.ttf"
+
+          python -m pip install 'fonttools[woff]'
+
+          python styles/chalkboard/demo/tools/subset.py
+
+          test -s "$FONT_DIR/wenkai-sub.woff2"
+          echo "All Chalkboard fonts are ready."
 
       - name: Render demonstration video
         env:
