@@ -21,11 +21,6 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-
       - name: Install project dependencies
         run: npm ci
 
@@ -38,51 +33,38 @@ jobs:
         run: |
           node node_modules/playwright-core/cli.js install --with-deps chromium-headless-shell
 
-      - name: Prepare Chalkboard fonts
+      - name: Prepare Blueprint fonts
         run: |
           set -eu
-          FONT_DIR="styles/chalkboard/demo/fonts"
-          mkdir -p "$FONT_DIR"
+          sh styles/blueprint/demo/tools/fonts.sh
 
-          EMS="https://gitlab.com/oskay/svg-fonts/-/raw/master/fonts/EMS"
+          test -s styles/blueprint/demo/fonts/ArchitectsDaughter-Regular.ttf
+          test -s styles/blueprint/demo/fonts/B612-Regular.ttf
+          test -s styles/blueprint/demo/fonts/B612-Bold.ttf
+          test -s styles/blueprint/demo/fonts/B612Mono-Regular.ttf
+          test -s styles/blueprint/demo/fonts/Allura-Regular.ttf
+          test -s styles/blueprint/demo/lines.json
+          test -s styles/blueprint/demo/voices/dur.json
 
-          for font in EMSDelight EMSCasualHand; do
-            curl --fail --location --retry 3 --retry-all-errors \
-              "$EMS/$font.svg" \
-              --output "$FONT_DIR/$font.svg"
-            test -s "$FONT_DIR/$font.svg"
-            echo "Downloaded $font.svg"
-          done
+          echo "All Blueprint rendering assets are ready."
 
-          curl --fail --location --retry 3 --retry-all-errors \
-            "https://github.com/lxgw/LxgwWenKai/releases/download/v1.530/LXGWWenKai-Regular.ttf" \
-            --output "$FONT_DIR/LXGWWenKai-Regular.ttf"
-
-          test -s "$FONT_DIR/LXGWWenKai-Regular.ttf"
-
-          python -m pip install 'fonttools[woff]'
-
-          python styles/chalkboard/demo/tools/subset.py
-
-          test -s "$FONT_DIR/wenkai-sub.woff2"
-          echo "All Chalkboard fonts are ready."
-
-      - name: Render demonstration video
+      - name: Render Blueprint demonstration
         env:
           LEMO_ANGLE: swiftshader
         run: |
-          node core/render/video.mjs styles/chalkboard/demo \
-            --size 1920x1080 \
+          node core/render/video.mjs styles/blueprint/demo \
+            --size 1280x720 \
             --fps 24 \
-            --workers 2 \
-            --out /tmp/lemo-test.mp4
+            --workers 1 \
+            --out /tmp/lemo-blueprint-test.mp4
 
-          test -s /tmp/lemo-test.mp4
+          test -s /tmp/lemo-blueprint-test.mp4
+          ls -lh /tmp/lemo-blueprint-test.mp4
 
       - name: Upload rendered MP4
         uses: actions/upload-artifact@v7
         with:
-          name: lemo-render-test
-          path: /tmp/lemo-test.mp4
+          name: blueprint-render-test
+          path: /tmp/lemo-blueprint-test.mp4
           if-no-files-found: error
           retention-days: 7
