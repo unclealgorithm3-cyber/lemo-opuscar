@@ -1,0 +1,54 @@
+name: Render test video
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Playwright Chromium
+        run: |
+          node node_modules/playwright-core/cli.js install --with-deps chromium-headless-shell
+
+      - name: Render demonstration video
+        env:
+          LEMO_ANGLE: swiftshader
+        run: |
+          node core/render/video.mjs styles/chalkboard/demo \
+            --size 1920x1080 \
+            --fps 24 \
+            --workers 2 \
+            --out /tmp/lemo-test.mp4
+
+          test -s /tmp/lemo-test.mp4
+
+      - name: Upload rendered MP4
+        uses: actions/upload-artifact@v7
+        with:
+          name: lemo-render-test
+          path: /tmp/lemo-test.mp4
+          if-no-files-found: error
+          retention-days: 7
