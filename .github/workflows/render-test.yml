@@ -33,6 +33,23 @@ jobs:
         run: |
           node node_modules/playwright-core/cli.js install --with-deps chromium-headless-shell
 
+      - name: Download Chalkboard font assets
+        run: |
+          set -eu
+          FONT_DIR="styles/chalkboard/demo/fonts"
+          EMS="https://gitlab.com/oskay/svg-fonts/-/raw/master/fonts/EMS"
+          mkdir -p "$FONT_DIR"
+
+          for font in EMSDelight EMSCasualHand; do
+            curl --fail --location --retry 3 --retry-all-errors \
+              "$EMS/$font.svg" \
+              --output "$FONT_DIR/$font.svg"
+
+            test -s "$FONT_DIR/$font.svg"
+            grep -qi 'font-face' "$FONT_DIR/$font.svg"
+            echo "Downloaded and checked $font.svg"
+          done
+
       - name: Render demonstration video
         env:
           LEMO_ANGLE: swiftshader
