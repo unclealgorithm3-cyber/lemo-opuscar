@@ -71,10 +71,11 @@ def add_noise(dst, start, duration, gain, pan=0.0):
         return
 
     noise = RNG.standard_normal(count).astype(np.float32)
-    envelope = np.sin(
-        np.linspace(0.0, np.pi, count, dtype=np.float32)
+    envelope = np.clip(
+        np.sin(np.linspace(0.0, np.pi, count, dtype=np.float32)),
+        0.0, 1.0
     ) ** 1.5
-    add_stereo(noise * envelope, start, gain, pan)
+    add_stereo(dst, noise * envelope, start, gain, pan)
 
 
 def make_music():
