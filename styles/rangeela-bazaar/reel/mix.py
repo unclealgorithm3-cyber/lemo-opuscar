@@ -61,8 +61,8 @@ def add_sweep(dst, start, duration, f0, f1, gain, pan=0.0):
     phase = 2.0 * np.pi * (
         f0 * t + 0.5 * (f1 - f0) * t * t / duration
     )
-    envelope = np.sin(np.linspace(0.0, np.pi, count, dtype=np.float32)) ** 1.5
-    add_stereo(np.sin(phase) * envelope, start, gain, pan)
+    envelope = np.clip(np.sin(np.linspace(0.0, np.pi, count, dtype=np.float32)), 0.0, 1.0) ** 1.5
+    add_stereo(dst, np.sin(phase) * envelope, start, gain, pan)
 
 
 def add_noise(dst, start, duration, gain, pan=0.0):
