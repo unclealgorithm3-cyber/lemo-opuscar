@@ -54,7 +54,10 @@ BAD=$(echo "$ERRS" | grep -vE "$BENIGN" | head -2)
 [ -z "$BAD" ] || die "the audio '$A' is damaged; ffmpeg reported while decoding it:
 $BAD"
 # seconds actually decoded (the last out_time from -progress) versus what the container claims; when the container duration is one ffmpeg "estimated from the bitrate" it's unreliable, so don't compare
-DEC=$(echo "$M" | grep '^out_time=' | tail -1 | cut -d= -f2 | awk '{ if ($0 ~ /^-/ || $0 !~ /:/) print 0; else { split($0, p, ":"); print p[1] * 3600 + p[2] * 60 + p[3] } }')
+# Measure decoded duration without loudnorm. FFmpeg 6.1 can
+# under-report out_time by about 2.9 seconds when loudnorm is active.
+D=$(ffmpeg -hide_banner -nostats -xerror -progress pipe:2 -i "$A" -f null - 2>&1) || die "ffmpeg cannot fully decode the audio '$A': $(echo "$D" | tail -3)"
+DEC=$(echo "$D" | grep '^out_time=' | tail -1 | cut -d= -f2 | awk '{ if ($0 ~ /^-/ || $0 !~ /:/) print 0; else { split($0, p, ":"); print p[1] * 3600 + p[2] * 60 + p[3] } }')
 CONT=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$A" 2>/dev/null | head -1)
 if ! echo "$M" | grep -q 'Estimating duration from bitrate' && awk -v d="${DEC:-0}" -v c="${CONT:-0}" 'BEGIN { tol = c * 0.05 > 0.15 ? c * 0.05 : 0.15; exit !(c + 0 > 0 && c - d > tol) }'; then
   die "only ${DEC:-0} s of the ${CONT} s that '$A' claims could be decoded: the file is damaged or cut off"
